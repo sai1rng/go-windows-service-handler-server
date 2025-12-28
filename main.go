@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	serviceName     = "go-windows-service-handler"
-	exporterSvcName = "windows_exporter"
-	serverPort      = ":5000"
+	serviceName    = "go-windows-service-handler"
+	defaultSvcName = "windows_exporter" // Fallback if no query param is provided
+	serverPort     = ":5000"
 )
 
 func main() {
@@ -89,29 +89,44 @@ func startServer() {
 
 // --- Endpoint Handlers ---
 
+// Helper to get service name from Query Param or Default
+func getServiceName(r *http.Request) string {
+	mySvcName := r.URL.Query().Get("service_name")
+	if mySvcName == "" {
+		return defaultSvcName
+	}
+	return mySvcName
+}
+
 func handleStart(w http.ResponseWriter, r *http.Request) {
-	if err := startWindowsService(exporterSvcName); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to start service: %v", err), http.StatusInternalServerError)
+	mySvcName := getServiceName(r)
+	
+	if err := startWindowsService(mySvcName); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to start service '%s': %v", mySvcName, err), http.StatusInternalServerError)
 		return
 	}
-	fmt.Fprintf(w, "Service '%s' started successfully.\n", exporterSvcName)
+	fmt.Fprintf(w, "Service '%s' started successfully.\n", mySvcName)
 }
 
 func handleStop(w http.ResponseWriter, r *http.Request) {
-	if err := stopWindowsService(exporterSvcName); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to stop service: %v", err), http.StatusInternalServerError)
+	mySvcName := getServiceName(r)
+
+	if err := stopWindowsService(mySvcName); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to stop service '%s': %v", mySvcName, err), http.StatusInternalServerError)
 		return
 	}
-	fmt.Fprintf(w, "Service '%s' stopped successfully.\n", exporterSvcName)
+	fmt.Fprintf(w, "Service '%s' stopped successfully.\n", mySvcName)
 }
 
 func handleStatus(w http.ResponseWriter, r *http.Request) {
-	status, err := getServiceStatus(exporterSvcName)
+	mySvcName := getServiceName(r)
+
+	status, err := getServiceStatus(mySvcName)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get status: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to get status for '%s': %v", mySvcName, err), http.StatusInternalServerError)
 		return
 	}
-	fmt.Fprintf(w, "Service '%s' state: %s\n", exporterSvcName, status)
+	fmt.Fprintf(w, "Service '%s' state: %s\n", mySvcName, status)
 }
 
 // --- Helper Functions ---
@@ -129,7 +144,6 @@ func startWindowsService(name string) error {
 	}
 	defer s.Close()
 
-	// FIXED: Start takes variadic arguments, not a slice
 	err = s.Start()
 	if err != nil {
 		return fmt.Errorf("could not start service: %v", err)
@@ -151,7 +165,6 @@ func stopWindowsService(name string) error {
 	}
 	defer s.Close()
 
-	// FIXED: Used _ to ignore the status variable
 	_, err = s.Control(svc.Stop)
 	if err != nil {
 		return fmt.Errorf("could not send stop control: %v", err)
