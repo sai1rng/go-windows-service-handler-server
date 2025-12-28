@@ -91,7 +91,7 @@ func startServer() {
 
 // Helper to get service name from Query Param or Default
 func getServiceName(r *http.Request) string {
-	mySvcName := r.URL.Query().Get("service_name")
+	mySvcName := r.URL.Query().Get("service-name")
 	if mySvcName == "" {
 		return defaultSvcName
 	}
